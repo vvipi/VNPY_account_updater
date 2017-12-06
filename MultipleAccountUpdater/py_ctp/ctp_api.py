@@ -171,7 +171,9 @@ class CtpTdApi(TdApi):
         
         self.frontID = 0            # 前置机编号
         self.sessionID = 0          # 会话编号
-        
+        self.symbolExchangeDict = {}        # 保存合约代码和交易所的映射关系
+        self.symbolSizeDict = {}            # 保存合约代码和合约大小的映射关系
+        self.symbolNameDict = {}        # 保存合约代码和合约名称的映射关系
     #----------------------------------------------------------------------
     def put_start_event(self):  # log事件注册
         event = Event(type_=EVENT_START + self.userID)
@@ -191,6 +193,9 @@ class CtpTdApi(TdApi):
         log = u'结算信息确认完成'
         self.put_log_event(log)
         self.put_start_event()
+        # 查询合约代码
+        self.reqID += 1
+        self.reqQryInstrument({}, self.reqID)
     #----------------------------------------------------------------------
     def onRspQryTradingAccount(self, data, error, n, last):
         """资金账户查询回报"""
@@ -208,7 +213,15 @@ class CtpTdApi(TdApi):
         if not data['InstrumentID']:
             return
         if error['ErrorID'] == 0:
+            # 读取交易所id|合约名称|方向|合约乘数
+            data['ExchangeID'] = self.symbolExchangeDict.get(data['InstrumentID'], EXCHANGE_UNKNOWN)
+            data['InstrumentName'] = self.symbolNameDict.get(data['InstrumentID'], PRODUCT_UNKNOWN)
             data['PosiDirection'] = posiDirectionMapReverse.get(data['PosiDirection'], '')
+            # 读取不到的先按1计算，持仓中的开仓均价虽然会显示错误的数字，但程序不会崩溃
+            data['VolumeMultiple'] = self.symbolSizeDict.get(data['InstrumentID'], 1)
+            # 组合持仓的合约乘数为0，会导致除数为零的错误，暂且修改为1
+            if data['VolumeMultiple'] == 0:
+                data['VolumeMultiple'] = 1
            
             event = Event(type_=EVENT_POSITION + self.userID)
             event.dict_['data'] = data
@@ -358,7 +371,25 @@ class CtpTdApi(TdApi):
         
     #----------------------------------------------------------------------
     def onRspQryInstrument(self, data, error, n, last):
-        pass
+        """
+        合约查询回报
+        由于该回报的推送速度极快，因此不适合全部存入队列中处理，
+        选择先储存在一个本地字典中，全部收集完毕后再推送到队列中
+        （由于耗时过长目前使用其他进程读取）
+        """
+        if error['ErrorID'] == 0:
+            self.symbolExchangeDict[data['InstrumentID']] = data['ExchangeID'] # 合约代码和交易所的映射关系
+            self.symbolSizeDict[data['InstrumentID']] = data['VolumeMultiple'] # 合约代码和合约乘数映射关系
+            self.symbolNameDict[data['InstrumentID']] = data['InstrumentName'] # 合约代码和合约名称映射关系
+
+            event = Event(type_=EVENT_INSTRUMENT)
+            event.dict_['data'] = data
+            event.dict_['last'] = last
+            self.__eventEngine.put(event)
+               
+        else:
+            log = '合约投资者回报，错误代码：' + str(error['ErrorID']) + ',   错误信息：' + str(error['ErrorMsg'])
+            self.put_log_event(log)
 
     #----------------------------------------------------------------------
     def onRspQryDepthMarketData(self, data, error, n, last): 
