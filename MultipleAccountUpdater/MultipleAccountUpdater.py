@@ -19,8 +19,8 @@ path = 'log/Log{date}'.format(date=datetime.now().strftime('%Y-%m-%d'))
 logging.basicConfig(filename=path, level=logging.INFO)
 
 
-ONEDRIVE_DIR = 'C:\\OneDrive\\' # 存放生成的记录的目录
-# ONEDRIVE_DIR = 'X:\\db_werobot\\'
+ONEDRIVE_DIR = 'C:/OneDrive/' # 存放生成的记录的目录
+# ONEDRIVE_DIR = 'X:/db_werobot/'
 # 设置文件
 CONFIG_FILE = 'config.json'
 # 时间
@@ -135,22 +135,22 @@ class MainEngine:
         self.save_order()
 
     def save_balance(self):
-        path = os.path.join(ONEDRIVE_DIR, self.userID + '\\balance.json')
+        path = os.path.join(ONEDRIVE_DIR, self.userID + '/balance.json')
         with open(path, 'w', encoding="utf-8") as f:
             jsonD = json.dumps(self.todayBalance, indent=4)
             f.write(jsonD)
     def save_order(self):
-        path = os.path.join(ONEDRIVE_DIR, self.userID + '\\order.json')
+        path = os.path.join(ONEDRIVE_DIR, self.userID + '/order.json')
         with open(path, 'w', encoding="utf-8") as f:
             data = json.dumps(self.orderDict, indent=4)
             f.write(data)
     def save_nontrade(self):
-        path = os.path.join(ONEDRIVE_DIR, self.userID + '\\nontrade.json')
+        path = os.path.join(ONEDRIVE_DIR, self.userID + '/nontrade.json')
         with open(path, 'w', encoding="utf-8") as f:
             data = json.dumps(self.workingOrderDict, indent=4)
             f.write(data)
     def save_nav(self):
-        path = os.path.join(ONEDRIVE_DIR, self.userID + '\\nav.json')
+        path = os.path.join(ONEDRIVE_DIR, self.userID + '/nav.json')
         with open(path, 'w', encoding="utf-8") as f:
             data = json.dumps(self.nav, indent=4)
             f.write(data)
@@ -256,7 +256,7 @@ class MainEngine:
                 self.dict_position.pop(index)
         # 保存持仓数据到文件
         if last:
-            path = os.path.join(ONEDRIVE_DIR, self.userID + '\\position.json')
+            path = os.path.join(ONEDRIVE_DIR, self.userID + '/position.json')
             with open(path, 'w', encoding="utf-8") as f:
                 jsonD = json.dumps(self.dict_position, indent=4)
                 f.write(jsonD)
@@ -330,7 +330,7 @@ class MainEngine:
         self.put_log('正在统计%s的净值' % self.userID)
         first = False
         try:
-            path = os.path.join(ONEDRIVE_DIR, self.userID + '\\nav.json')
+            path = os.path.join(ONEDRIVE_DIR, self.userID + '/nav.json')
             with open(path, 'r', encoding="utf-8") as f:
                 na = json.load(f)
         except FileNotFoundError:
