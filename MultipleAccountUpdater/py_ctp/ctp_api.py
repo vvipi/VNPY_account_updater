@@ -208,16 +208,8 @@ class CtpTdApi(TdApi):
         if not data['InstrumentID']:
             return
         if error['ErrorID'] == 0:
-            #读取交易所id\合约名称\方向|合约乘数
-            data['ExchangeID'] = self.symbolExchangeDict.get(data['InstrumentID'], EXCHANGE_UNKNOWN)
-            data['InstrumentName'] = self.symbolNameDict.get(data['InstrumentID'], PRODUCT_UNKNOWN)
             data['PosiDirection'] = posiDirectionMapReverse.get(data['PosiDirection'], '')
-            #读取不到的先按1计算，持仓中的开仓均价虽然会显示错误的数字，但程序不会崩溃
-            data['VolumeMultiple'] = self.symbolSizeDict.get(data['InstrumentID'], 1)
-            #组合持仓的合约乘数为0，会导致出错，暂且修改为1
-            if data['VolumeMultiple'] == 0:
-                data['VolumeMultiple'] = 1
-            
+           
             event = Event(type_=EVENT_POSITION + self.userID)
             event.dict_['data'] = data
             event.dict_['last'] = last
