@@ -124,6 +124,20 @@ class MainEngine:
         self.password = config['password']         # 密码
         self.brokerID = config['brokerID']        # 经纪商代码
         self.TdIp = config['TdIp']         # 交易服务器地址
+
+        # 当天重启软件时载入之前的资金记录，顺便加在这里 /摊手
+        try:
+            path = os.path.join(ONEDRIVE_DIR, self.userID + '/balance.json')
+            with open(path, 'r', encoding="utf-8") as f:
+                historyBalance = json.load(f)
+        except FileNotFoundError:
+            return
+        if len(historyBalance) > 0:
+            lastUpdatetime = historyBalance[0]['updateTime']
+            lastUpdatetime = datetime.strptime(lastUpdatetime, '%Y-%m-%d_%H:%M:%S')
+            t = datetime.now()
+            if t - lastUpdatetime < timedelta(hours=6): # 如果当天出错或重启，不清空盘中资金的数据
+                self.todayBalance = historyBalance
     #----------------------------------------------------------------------
     def startReq(self, event):
         self.ee.register(EVENT_TIMER, self.getAccountPosition) # 定时器事件，循环查询
@@ -178,7 +192,7 @@ class MainEngine:
         # 只记录有交易的时间段
         trading = time(20, 59) < t < time(23, 59, 59) or time(0, 0) < t < time(1, 31) or time(8, 59) < t < time(11, 31) or time(13, 29)< t < time(15, 1)
         if trading:
-            updateTime = t.strftime('%H:%M:%S')
+            updateTime = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
             data = {
             'balance': balance,
             'updateTime': updateTime,
@@ -416,7 +430,7 @@ class Watcher:
         for index in self.config:
             id = index['userID']
             if id not in listPath:
-                newPath = os.path.join(savePath, id)
+                newPath = ''.join([savePath, id])
                 os.mkdir(newPath)
                 print('正在为新用户{user}创建目录'.format(user=id))
 
