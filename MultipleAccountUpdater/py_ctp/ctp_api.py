@@ -144,7 +144,31 @@ statusMap[STATUS_NOTTRADED] = defineDict["THOST_FTDC_OST_NoTradeQueueing"]
 statusMap[STATUS_CANCELLED] = defineDict["THOST_FTDC_OST_Canceled"]
 statusMapReverse = {v:k for k,v in statusMap.items()}
 
+class CtaPositionData(object):
+    """持仓数据类"""
 
+    #----------------------------------------------------------------------
+    def __init__(self):
+        """Constructor"""
+        self.gatewayName = EMPTY_STRING         # Gateway名称      
+        # 代码编号相关
+        self.symbol = EMPTY_STRING              # 合约代码
+        self.exchange = EMPTY_STRING            # 交易所代码
+        self.vtSymbol = EMPTY_STRING            # 合约在vt系统中的唯一代码，合约代码.交易所代码  
+        
+        # 持仓相关
+        self.direction = EMPTY_STRING           # 持仓方向
+        self.position = EMPTY_INT               # 持仓量
+        self.frozen = EMPTY_INT                 # 冻结数量
+        self.price = EMPTY_FLOAT                # 持仓均价
+        self.vtPositionName = EMPTY_STRING      # 持仓在vt系统中的唯一代码，通常是vtSymbol.方向
+        self.ydPosition = EMPTY_INT             # 昨持仓
+        self.positionProfit = EMPTY_FLOAT       # 持仓盈亏（盯）
+
+        # 自行添加
+        self.openPrice = EMPTY_FLOAT            # 开仓均价
+        self.openProfit = EMPTY_FLOAT           # 开仓盈亏（浮）
+        self.name = EMPTY_STRING                # 合约名称
 ########################################################################
 class CtpTdApi(TdApi):
     """CTP交易API实现"""
@@ -174,6 +198,8 @@ class CtpTdApi(TdApi):
         self.symbolExchangeDict = {}        # 保存合约代码和交易所的映射关系
         self.symbolSizeDict = {}            # 保存合约代码和合约大小的映射关系
         self.symbolNameDict = {}        # 保存合约代码和合约名称的映射关系
+        
+        self.posDict = {}           # 持仓缓存
     #----------------------------------------------------------------------
     def put_start_event(self):  # log事件注册
         event = Event(type_=EVENT_START + self.userID)
@@ -214,19 +240,73 @@ class CtpTdApi(TdApi):
             return
         if error['ErrorID'] == 0:
             # 读取交易所id|合约名称|方向|合约乘数
-            data['ExchangeID'] = self.symbolExchangeDict.get(data['InstrumentID'], EXCHANGE_UNKNOWN)
-            data['InstrumentName'] = self.symbolNameDict.get(data['InstrumentID'], PRODUCT_UNKNOWN)
-            data['PosiDirection'] = posiDirectionMapReverse.get(data['PosiDirection'], '')
-            # 读取不到的先按1计算，持仓中的开仓均价虽然会显示错误的数字，但程序不会崩溃
-            data['VolumeMultiple'] = self.symbolSizeDict.get(data['InstrumentID'], 1)
-            # 组合持仓的合约乘数为0，会导致除数为零的错误，暂且修改为1
-            if data['VolumeMultiple'] == 0:
-                data['VolumeMultiple'] = 1
-           
-            event = Event(type_=EVENT_POSITION + self.userID)
-            event.dict_['data'] = data
-            event.dict_['last'] = last
-            self.__eventEngine.put(event)
+            ExchangeID = self.symbolExchangeDict.get(data['InstrumentID'], EXCHANGE_UNKNOWN)
+                
+                
+            # 获取持仓缓存对象
+            posName = '.'.join([data['InstrumentID'], data['PosiDirection']])
+
+            if posName in self.posDict:
+                pos = self.posDict[posName]
+            else:
+                pos = CtaPositionData()
+                self.posDict[posName] = pos
+                
+                pos.gatewayName = 'CTP'
+                pos.symbol = data['InstrumentID']
+                pos.vtSymbol = pos.symbol
+                pos.direction = data['PosiDirection']
+                pos.vtPositionName = '.'.join([pos.vtSymbol, pos.direction]) 
+                pos.name = self.symbolNameDict.get(data['InstrumentID'], PRODUCT_UNKNOWN)
+            
+            # 针对上期所持仓的今昨分条返回（有昨仓、无今仓），读取昨仓数据.其他交易所只有一条，直接读取
+            if (data['YdPosition'] and not data['TodayPosition']) and ExchangeID == EXCHANGE_SHFE:
+                pos.ydPosition = data['Position']
+            if ExchangeID != EXCHANGE_SHFE:
+                pos.ydPosition = data['YdPosition']
+                print(posName, ExchangeID, pos.ydPosition, data['TodayPosition'])
+                
+            # 计算成本
+            size = self.symbolSizeDict[pos.symbol]
+            cost = pos.price * pos.position * size
+            openCost = pos.openPrice * pos.position * size
+            
+            # 汇总总仓
+            pos.position += data['Position']
+            pos.positionProfit += data['PositionProfit']
+            # 计算开仓盈亏（浮）
+            sign = 1 if pos.direction == DIRECTION_LONG else -1
+            op = data["PositionProfit"] + (data["PositionCost"] - data["OpenCost"]) * sign
+            pos.openProfit += op
+            
+            # 计算持仓均价和开仓均价
+            if pos.position and size:    
+                pos.price = (cost + data['PositionCost']) / (pos.position * size)
+                pos.openPrice = (openCost + data["OpenCost"]) / (pos.position * size)
+            
+            # 读取冻结
+            if pos.direction == DIRECTION_LONG: 
+                pos.frozen += data['LongFrozen']
+            else:
+                pos.frozen += data['ShortFrozen']
+            
+            # 查询回报结束
+            if last:
+                # 遍历推送
+                i = 0
+                for pos in self.posDict.values():
+                    # vnpy格式持仓事件
+                    i += 1
+                    lastPos = True if i >= len(self.posDict) else False
+
+                    event2 = Event(type_=EVENT_POSITION + self.userID)
+                    event2.dict_['data'] = pos
+                    event2.dict_['last'] = lastPos
+                    self.__eventEngine.put(event2)
+                
+                # 清空缓存
+                self.posDict.clear()
+
         else:
             log = ('持仓查询回报，错误代码：'  +str(error['ErrorID']) + ',   错误信息：' +str(error['ErrorMsg']))
             self.put_log_event(log)

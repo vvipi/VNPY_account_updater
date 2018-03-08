@@ -219,61 +219,34 @@ class MainEngine:
             self.navComfirmed = True
     # ----------------------------------------------------------------------
     def position(self, event):#处理持仓事件数据
-        var = event.dict_['data']
+        pos = event.dict_['data']
         last = event.dict_['last']
-        ExchangeID = var['ExchangeID']
-        directionmap = {'多持':DIRECTION_LONG, '空持':DIRECTION_SHORT}
-        if var["Position"] != 0:#有持仓
-            index = var["InstrumentID"] + '.' + var["PosiDirection"]
-            if index not in self.dict_position.keys():#计算持仓数据
-                tmp={}
-                tmp["合约名称"] = var["InstrumentID"]
-                tmp["持仓方向"] = var["PosiDirection"]
-                tmp["总持仓量"] = var["Position"]
-                tmp["今持仓量"] = 0
-                tmp["昨持仓量"] = 0
-                if var["PosiDirection"] == DIRECTION_LONG:
-                    tmp["持仓方向"] = '多头'
-                    po = round(var["PositionProfit"] + var["PositionCost"] - var["OpenCost"], 2)
-                    tmp["开仓盈亏"]  = po
-                else:
-                    tmp["持仓方向"] = '空头'
-                    po = round(var["PositionProfit"] + var["OpenCost"] - var["PositionCost"], 2)
-                    tmp["开仓盈亏"]  = po
-                # 上期所品种今仓昨仓分两条推送
-                if ExchangeID == EXCHANGE_SHFE:
-                    if var["PositionDate"] == "2":   #1今仓，2昨仓
-                        tmp["昨持仓量"] = var["Position"]
-                    if var["PositionDate"] == "1":  #1今仓，2昨仓
-                        tmp["今持仓量"] = var["Position"]
-                    pt = tmp["今持仓量"] + tmp["昨持仓量"]
-                    tmp["总持仓量"] = pt
-                self.dict_position[index] = tmp
-            else:#更新可能会变的数据
-                self.dict_position[index]["总持仓量"] = var["Position"]
-                if var["PosiDirection"] == DIRECTION_LONG:
-                    po = round(var["PositionProfit"] + var["PositionCost"] - var["OpenCost"], 2)
-                    self.dict_position[index]["开仓盈亏"] = po
-                else:
-                    po = round(var["PositionProfit"] + var["OpenCost"] - var["PositionCost"], 2)
-                    self.dict_position[index]["开仓盈亏"] = po
-                if ExchangeID == EXCHANGE_SHFE:
-                    if var["PositionDate"] == "2":   #1今仓，2昨仓
-                        self.dict_position[index]["昨持仓量"] = var["Position"]
-                    if var["PositionDate"] == "1":  #1今仓，2昨仓
-                        self.dict_position[index]["今持仓量"] = var["Position"]
-                    pt = self.dict_position[index]["今持仓量"] + self.dict_position[index]["昨持仓量"]
-                    self.dict_position[index]["总持仓量"] = pt
-        else :#没有持仓，有2个情况：1，已经全部平仓，2，有开仓挂单
-            index = var["InstrumentID"] + '.' + var["PosiDirection"]
-            if index in self.dict_position.keys():#只处理全部平仓的表格
-                self.dict_position.pop(index)
+        dm = {
+            DIRECTION_LONG:"多持",
+            DIRECTION_SHORT:"空持",
+         }
+
+        if pos.position is not 0:
+            posName = '.'.join([pos.symbol + pos.direction])
+            if posName not in self.dict_position.keys():
+                tmp = {}
+                tmp["合约名称"] = pos.name
+                tmp["持仓方向"] = dm.get(pos.direction, '未知方向')
+                tmp["总持仓量"] = pos.position
+                tmp["昨持仓量"] = pos.ydPosition
+                tmp["今持仓量"] = pos.position - pos.ydPosition
+                tmp["开仓盈亏"]  = pos.openProfit
+                self.dict_position[posName] = tmp
+
         # 保存持仓数据到文件
         if last:
-            path = os.path.join(ONEDRIVE_DIR, self.userID + '/position.json')
+            path = ''.join([ONEDRIVE_DIR, self.userID, '/position.json'])
             with open(path, 'w', encoding="utf-8") as f:
                 jsonD = json.dumps(self.dict_position, indent=4)
                 f.write(jsonD)
+            
+            self.dict_position.clear() # 清空
+
     # ----------------------------------------------------------------------
     def updateOrder(self, event):
         """"""
@@ -425,7 +398,8 @@ class Watcher:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
             self.config = json.load(f)
         # 创建新目录
-        savePath = os.path.abspath(ONEDRIVE_DIR)
+        # savePath = os.path.abspath(ONEDRIVE_DIR)
+        savePath = ONEDRIVE_DIR
         listPath = [x for x in os.listdir(savePath) if os.path.isdir(os.path.join(savePath, x))]
         for index in self.config:
             id = index['userID']
