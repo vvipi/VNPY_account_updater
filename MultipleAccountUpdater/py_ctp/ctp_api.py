@@ -241,7 +241,7 @@ class CtpTdApi(TdApi):
         if error['ErrorID'] == 0:
             # 读取交易所id|合约名称|方向|合约乘数
             ExchangeID = self.symbolExchangeDict.get(data['InstrumentID'], EXCHANGE_UNKNOWN)
-                
+            data['PosiDirection'] = posiDirectionMapReverse.get(data['PosiDirection'], '')
                 
             # 获取持仓缓存对象
             posName = '.'.join([data['InstrumentID'], data['PosiDirection']])
