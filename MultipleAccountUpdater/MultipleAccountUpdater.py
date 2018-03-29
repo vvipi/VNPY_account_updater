@@ -382,7 +382,7 @@ class Watcher:
         self.load_config() # 载入账户信息
         self.loop() # 运行主循环
 
-    def __def__(self):
+    def __del__(self):
         '''join process when exit'''
         if self.p:
             self.p.terminate()
