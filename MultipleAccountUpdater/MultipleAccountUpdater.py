@@ -25,8 +25,8 @@ ONEDRIVE_DIR = 'C:/OneDrive/' # 存放生成的记录的目录
 CONFIG_FILE = 'config.json'
 # 时间
 NIGHT_START = time(20, 47) # 夜盘开盘
-NIGHT_END = time(23, 59, 59) 
-MORNING_START = time(0, 0)  # 夜盘跨过0点，分两段
+# NIGHT_END = time(23, 59, 59) 
+# MORNING_START = time(0, 0)  # 夜盘跨过0点，分两段
 MORNING_END = time(2, 31)
 DAY_START = time(8, 47) # 日盘开盘
 DAY_END = time(15, 35) # 日盘收盘
@@ -438,9 +438,9 @@ class Watcher:
         open_at_morning = self.todaySetting[4]
 
         # 判断是否有开盘，且在开盘时间
-        if istradeday and open_at_night and (NIGHT_START < self.currentTime < NIGHT_END):
+        if istradeday and open_at_night and NIGHT_START < self.currentTime:
             running = True
-        if open_at_morning and (MORNING_START < self.currentTime < MORNING_END):# 周六凌晨可能有开盘，因此不判断是否交易日
+        if open_at_morning and self.currentTime < MORNING_END:# 周六凌晨可能有开盘，因此不判断是否交易日
             running = True
         if istradeday and (DAY_START < self.currentTime < DAY_END):
             running = True
@@ -467,9 +467,6 @@ class Watcher:
             # 更新当前时间
             self.currentDate = datetime.now().strftime('%Y%m%d')
             self.currentTime = datetime.now().time()
-            if self.currentTime >= NIGHT_END: # 避免零点重启
-                sleep(1)
-                continue
             self.check_and_run()
             sleep(9)
             
